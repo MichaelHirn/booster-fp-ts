@@ -87,12 +87,12 @@ jobs:
         # (see "publish" job below)
         # and to generate the package.json that semantic-release
         # needs
-        run: deno task npm:build -- ${{steps.current_tag.outputs.tag}}
-
-      - run: cp -r ./npm/package.json ./npm/package-lock.json ./npm/node_modules ./
+        run: deno task npm:build -- ${{steps.current_tag.outputs.tag || '0.0.1' }}
 
       - name: Semantic Release
-        run: npx semantic-release
+        run: |
+          cp -r ./npm/package.json ./npm/package-lock.json ./npm/node_modules ./
+          npx semantic-release
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
 

@@ -19,10 +19,6 @@ await build({
     // see JS docs for overview and more options
     deno: true,
     weakRef: true,
-    // crypto shim doesn't work and throws error:
-    // > Property 'randomUUID' does not exist on type 'Crypto'.
-    // so we turn it off and use uuid.deno and uuid.node files.
-    crypto: false,
   },
   mappings: {
     'https://raw.githubusercontent.com/michaelhirn/fp-ts/master/lib/Either.ts': {
