@@ -1,0 +1,146 @@
+name: DENO
+
+on:
+  push:
+    branches:
+    - master
+  pull_request:
+    branches:
+    - master
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+    - uses: denoland/setup-deno@v1.0.0
+      with:
+        deno-version: v1.25
+
+    # Check if the code is formatted according to Deno's default formatting conventions.
+    - run: deno fmt --check
+
+    # Scan the code for syntax errors and style issues.
+    - run: deno lint
+
+    # Run all test files in the repository and collect code coverage.
+    - run: deno task test -- --coverage=cov/
+
+    # This generates a report from the collected coverage in previous step.
+    - run: deno coverage --lcov --output=cov/cov-head.lcov cov/
+      continue-on-error: true
+
+    - name: Genereate Test Coverage for base branch
+      continue-on-error: true
+      run: |
+        git fetch
+        git checkout origin/${{ github.event.pull_request.base.ref }}
+        deno task test -- --coverage=cov/
+        deno coverage --lcov cov/ > cov/cov-base.lcov
+
+    - name: Publish Test Coverage
+      if: github.event_name == 'pull_request'
+      uses: romeovs/lcov-reporter-action@v0.3.1
+      with:
+        github-token: ${{ secrets.GH_TOKEN }}
+        lcov-file: cov/cov-head.lcov
+        lcov-base: cov/cov-base.lcov
+        filter-changed-files: true
+        delete-old-comments: true
+
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          # this is necessary for @semantic-release/git to work with
+          # protected branches. See here for more:
+          # https://github.com/semantic-release/git/issues/196
+          token: ${{ secrets.GH_TOKEN }}
+          fetch-depth: 0
+
+      - name: Get Current Tag
+        id: current_tag
+        uses: "WyriHaximus/github-action-get-previous-tag@v1"
+        with:
+          fallback: v0.1.0
+
+      - name: Use Node
+        uses: actions/setup-node@v1
+        with:
+          node-version: '14.18'
+
+      - name: Use Deno
+        uses: denoland/setup-deno@v1.0.0
+        with:
+          deno-version: v1.25
+
+      - name: Setup Node directory
+        # checking that we can build the node packag for
+        # when it is actually needed when we merge the PR
+        # (see "publish" job below)
+        # and to generate the package.json that semantic-release
+        # needs
+        run: deno task npm:build -- ${{steps.current_tag.outputs.tag}}
+
+      - run: cp -r ./npm/package.json ./npm/package-lock.json ./npm/node_modules ./
+
+      - name: Semantic Release
+        run: npx semantic-release
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  publish:
+    name: Publish NPM to Github Packages
+    needs: [release]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Get Current Tag
+        id: current_tag
+        uses: "WyriHaximus/github-action-get-previous-tag@v1"
+        with:
+          fallback: v0.1.0
+
+      - name: Use Node
+        uses: actions/setup-node@v1
+        with:
+          node-version: '14.18'
+          registry-url: https://npm.pkg.github.com/
+          scope: "@MichaelHirn"
+
+      - name: Use Deno
+        uses: denoland/setup-deno@v1.0.0
+        with:
+          deno-version: v1.25
+
+      - name: Setup Node directory
+        run: deno task npm:build -- ${{steps.current_tag.outputs.tag}}
+
+      - name: Print Package.json
+        working-directory: ./npm
+        run: cat package.json
+
+      - name: Create Node Package
+        working-directory: ./npm
+        run: npm pack
+
+      - run: echo "@MichaelHirn:registry=https://npm.pkg.github.com" >> .npmrc
+        working-directory: ./npm
+
+      - run: npm publish $(ls *.tgz)
+        working-directory: ./npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GH_TOKEN }}
+

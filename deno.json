@@ -1,0 +1,31 @@
+{
+  "lint": {
+    "files": {
+      "exclude": ["npm", "scripts", "cov"]
+    }
+  },
+  "fmt": {
+    "files": {
+      "exclude": [
+        "npm",
+        "scripts",
+        "cov",
+        "CHANGELOG.md",
+        "README.md",
+        "commitlint.config.js",
+        ".releaserc.json"
+      ]
+    },
+    "options": {
+      "useTabs": false,
+      "lineWidth": 120,
+      "indentWidth": 2,
+      "singleQuote": true,
+      "proseWrap": "preserve"
+    }
+  },
+  "tasks": {
+    "test": "deno test ./test",
+    "npm:build": "deno run --allow-env --allow-read --allow-write --allow-net --allow-run scripts/build_npm.ts"
+  }
+}
